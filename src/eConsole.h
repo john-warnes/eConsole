@@ -19,15 +19,24 @@
 #ifndef __ECONSOLE_H__
 #define __ECONSOLE_H__
 
-#define MAXCOMMANDSIZE 80
-#define MAXCOMMANDCOUNT 10
+#define EC_COMMANDMAXSIZE 80
+#define EC_COMMANDMAXCOUNT 30
 
-typedef int(*command_handler)(void *args);
+typedef int(*eC_commandHandler)(void *args);
 
-int Console_Add_Command(char *Label, command_handler Handler);
-int Console_Process(char *command_line);
-long Console_Process_Arg_As_Int(void *arg);
-double Console_Process_Arg_As_Double(void *arg);
+int eC_AddCommand(char *Label, eC_commandHandler Handler);
+int eC_ProcessCommandLine(char *commandLine);
+long eC_Arg2Int(void *arg);
+double eC_Arg2Double(void *arg);
+char* eC_CommandComplete(char *curCommandLine);
 
+int eC_LineAddChar(char ch);
+int eC_LineDelChar(void);
+int eC_LineProcess(void);
+char* eC_LineComplete(void);
+void eC_LineClear(void);
+
+extern char lineBuf[EC_COMMANDMAXSIZE+1];
+extern int linePos;
 
 #endif /* __ECONSOLE_H__ */

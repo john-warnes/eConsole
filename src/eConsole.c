@@ -1,5 +1,5 @@
 /** ============================================================================
- *  @file  econ.cpp
+ *  @file  eConsol.cpp
  *  @brief Econsole
  *
  *  @author John Warnes
@@ -8,60 +8,201 @@
  *       Created:  27.Jul.2017
  *      Revision:  none
  *      Compiler:  gcc
- *  Organization:  Organization
+ *  Organization:  jwanres
  *     Copyright:  Copyright (c) 2017, John Warnes
  *
  * =============================================================================
  */
-#define __USE_POSIX
-
 
 #include <stdio.h>  // printf
-#include <stdlib.h>
-#include <stdint.h> // types
-
-#include <string.h> // str funcs
+#include <stdlib.h> // ??
+#include <stdint.h> // Types
+#include <string.h> // Strings
 
 #include "eConsole.h"
 
-int command_count = 0;
 
-struct command {
-    char *label;
-    command_handler handler;
+// Internal Command Line Buffer
+char lineBuf[EC_COMMANDMAXSIZE+1] = "";
+int  linePos = 0;
+
+
+// Struct for holding commands and handlers
+int eC_commandCount = 0; // Number of current commands
+struct eC_command {      // Command Structure
+    char *label;         // Command as a string
+    eC_commandHandler handler; // Function handler for the command
 };
 
-struct command commands[MAXCOMMANDCOUNT];
+// Array of the registered commands
+struct eC_command eC_commands[EC_COMMANDMAXCOUNT];
 
-int Console_Add_Command(char *Label, command_handler Handler)
+
+
+//
+// #### Functions 
+//
+
+
+/**
+* @brief: Add one char to the internal line buffer if it has room
+*
+* @param: char character to add
+*
+* @return: int 0 success and -1 on line buffer full
+*/
+int eC_LineAddChar(char ch)
 {
-    if (command_count >= MAXCOMMANDCOUNT) return -1;
-    commands[command_count].label = Label;
-    commands[command_count].handler = Handler;
-    command_count++;
+    if (linePos < EC_COMMANDMAXSIZE)
+    {
+        lineBuf[linePos++] = ch;
+        return 0;
+    }
+
+    lineBuf[EC_COMMANDMAXSIZE] = '\0';
+    return -1;
+}
+
+
+/**
+* @brief: Remove one char from the internal line buffer if one exists
+*
+* @param: void
+*
+* @return: int always 0
+*/
+int eC_LineDelChar(void)
+{
+    if (linePos <= 0 || lineBuf[0] == '\0') return -1;
+    lineBuf[--linePos] = '\0';
     return 0;
 }
 
-int Console_Process(char *command_line)
+
+/**
+* @brief: Process the internal Line as a completed command
+*
+* @param: void
+*
+* @return: 0 on success, -1 on command not found, else command error
+*/
+int eC_LineProcess(void)
+{
+    if (lineBuf[0] == '\0' || lineBuf[0] == '\n' || lineBuf[0] == '\r') return 0; // If no command reutrn did nothing successfully
+    lineBuf[linePos] = '\0'; //Null Term the current line just in case
+    return eC_ProcessCommandLine(lineBuf);
+}
+
+
+/**
+* @brief: Attempt to match the current line to a command and complete it
+*
+* @param: void
+*
+* @return: char* pointer to the part of the command append to current line
+*/
+char* eC_LineComplete(void)
+{
+    lineBuf[linePos] = '\0';
+    char *match = eC_CommandComplete(lineBuf);
+    strncpy(lineBuf+linePos, match, EC_COMMANDMAXSIZE-linePos);
+    linePos += strlen(match);
+    if ( linePos > EC_COMMANDMAXSIZE ) linePos = EC_COMMANDMAXSIZE;
+    return match;
+}
+
+
+/**
+* @brief: Clear the internal line buffer
+*
+* @param: void
+*
+* @return: void
+*/
+void eC_LineClear(void)
+{
+    linePos=0;
+    lineBuf[0] = '\0';
+}
+
+
+/**
+* @brief: Add a command and function handler to the eConsole system
+*
+* @param: char *Label
+*       : eC_commandHandler Handler pouinter to the function
+*
+* @return: -1 on no more room for commands 0 on success
+*/
+int eC_AddCommand(char *Label, eC_commandHandler Handler)
+{
+    if (eC_commandCount >= EC_COMMANDMAXCOUNT) return -1;
+    eC_commands[eC_commandCount].label = Label;
+    eC_commands[eC_commandCount].handler = Handler;
+    eC_commandCount++;
+    return 0;
+}
+
+
+
+/**
+* @brief: Find command match for given command line, Note returns first match
+*
+* @param: char* The current partial command line to match
+*
+* @return: char* pointer to string with the reminder of a match or NULL on no match
+*
+* @example: eC_CommandComplete("Com"); might return "mand" if match was found for "Command"
+*/
+char* eC_CommandComplete(char *curCommandLine)
+{
+    int i;
+    for (i=0; i<eC_commandCount; i++)
+        if (strncmp(eC_commands[i].label, curCommandLine, strlen(curCommandLine)) == 0)
+            return eC_commands[i].label + strlen(curCommandLine);
+    return NULL;
+}
+
+
+
+/**
+* @brief: Processes given string in the eConsole System as a commandLine
+*
+* @param: char* String containing the commandLine to process
+*
+* @return: 0 on success, -1 command not found, other error are command specific
+*/
+int eC_ProcessCommandLine(char *commandLine)
 {
     int error = -1;
-    for (int i=0; i<command_count; i++)
-        if (strncmp(commands[i].label, command_line, strlen(commands[i].label)) == 0)
+    int i;
+    for (i=0; i<eC_commandCount; i++)
+        if (strncmp(eC_commands[i].label, commandLine, strlen(eC_commands[i].label)) == 0)
         {
-            if (strchr(command_line,' ')==NULL)
-                error = commands[i].handler("");
+            if (strchr(commandLine,' ')==NULL)
+            {
+                error = eC_commands[i].handler("");
+                break;
+            }
             else
-                error = commands[i].handler( strchr(command_line,' ')+1 );
+            {
+                error = eC_commands[i].handler( strchr(commandLine,' ')+1 );
+                break;
+            }
         }
-    if (error==-1) 
-    {
-        printf("Command Not Found: %s\r\n", command_line);
-        return -1;
-    }
-    return 0;
+    if (error==-1) printf(" Command Not Found: '%s'\r\n", commandLine);
+    return error;
 }
 
-long Console_Process_Arg_As_Int(void *arg)
+
+/**
+* @brief: covert a string into a Int, with support for Hex Oct and Binary Prefixes
+*
+* @param: char* pointer to NULL term string with arg
+*
+* @return: long converted value or 0 if unable to convert
+*/
+long eC_Arg2Int(void *arg)
 {
     if (arg == NULL) return 0;
     char *str = (char*) arg;
@@ -72,79 +213,29 @@ long Console_Process_Arg_As_Int(void *arg)
     {
         if (str[1] >= '1' && str[1] <= '7')
             return strtol(str, NULL, 8);
-        if (str[1] == 'B' || str[1] == 'B')
+        if (str[1] == 'b' || str[1] == 'B')
             return strtol(str, NULL, 2);
         if (str[1] == 'x' || str[1] == 'X')
             return strtol(str, NULL, 16);
+        return 0;
     }
 
-    printf("[Console_Process_Arg_As_Int] Error on arg: '%s\r\n' == $d", str);
+    printf("[Error] 'Process_Arg_As_Int' Arg: '%s' int($d)\r\n", str);
     return 0;
 }
 
-double Console_Process_Arg_As_Double(void *arg)
+
+/**
+* @brief: covert a string into a Double
+*
+* @param: char* pointer to NULL term string with arg
+*
+* @return: double converted value or 0 if unable to convert
+*/
+double eC_Arg2Double(void *arg)
 {
     if (arg == NULL) return 0;
     return strtof((char *)arg, NULL);
 }
 
 
-
-
-int LOG(void *args)
-{
-    printf("[LOG]: %s\r\n", (char *)args);
-    return 0;
-}
-
-int PrintTest(void *args)
-{
-    char arg[MAXCOMMANDSIZE+1];
-    strncpy(arg,args,MAXCOMMANDSIZE);
-
-    printf("PrintTest String: %s", arg);
-
-    printf("[PrintTest]: %ld,", Console_Process_Arg_As_Int(strtok(arg ," ")));
-    printf("%ld, ", Console_Process_Arg_As_Int(strtok(NULL ," ")));
-    printf("%f, ", Console_Process_Arg_As_Double(strtok(NULL ," ")));
-    printf("%f\r\n",   Console_Process_Arg_As_Double(strtok(NULL ," ")));
-
-//    printf("[PrintTest]: %s\r\n",strtok(arg," ") );
-      return 0;
-}
-
-int main(int argc, char *argv[])
-{
-    //char cmd[MAXCOMMANDSIZE+1];
-    //cmd[MAXCOMMANDSIZE] = '\0';
-    //
-
-    Console_Add_Command("LOG",&LOG);
-    Console_Add_Command("log",&LOG);
-    Console_Add_Command("log",&LOG);
-
-    int error = Console_Process("LOG 'LOG' TEST");
-
-    if (error)
-    {
-        printf("Error Command not found or invalid: %d\r\n", error);
-    }
-
-    printf ("Numbers '123' = %ld\r\n",Console_Process_Arg_As_Int("123"));
-    printf ("Numbers '07' = %ld\r\n",Console_Process_Arg_As_Int("07"));
-    printf ("Numbers '0xA' = %ld\r\n",Console_Process_Arg_As_Int("0xA"));
-
-
-    printf ("Numbers '1.2f' = %f\r\n",Console_Process_Arg_As_Double("1.2f"));
-    printf ("Numbers '0.001' = %f\r\n",Console_Process_Arg_As_Double("0.001"));
-    printf ("Numbers '3451.1456' = %f\r\n",Console_Process_Arg_As_Double("3451.1456"));
-
-
-    printf ("Start Printtest\r\n");
-
-    PrintTest("99 100 123 500\r\n");
-    PrintTest("123 0xAA 10.123 0x0.00091\r\n");
-
-    printf ("end of main\r\n");
-    return 0;
-}
